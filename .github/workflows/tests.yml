@@ -1,0 +1,29 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: pip install pytest
+      - name: Unit + pipeline tests
+        run: pytest -q
+      - name: End-to-end run on a generated snapshot
+        run: |
+          python data/generate.py --rows 5000 --seed 7 --out data/out/ci.jsonl
+          python -m middlewatch run --snapshot data/out/ci.jsonl --no-llm --quiet \
+            --json data/out/ci-report.json
+          python scripts/evaluate.py --snapshot data/out/ci.jsonl

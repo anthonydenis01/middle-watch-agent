@@ -1,0 +1,141 @@
+# Middle Watch — detection thresholds
+# ------------------------------------
+# Every number that decides "is this an exception or is this noise?" lives here.
+# False-positive control is a feature: tighten these to cut noise, loosen them to
+# widen the net. Nothing in the detector code hardcodes a threshold.
+#
+# Edit and re-run — no code change required:
+#   middlewatch run --snapshot data/out/snapshot.jsonl --config config/thresholds.toml
+
+[general]
+# Incidents scoring below this are computed, counted, and suppressed from the
+# operator queue. They stay in the JSON output under "suppressed" so the noise
+# floor is auditable instead of invisible.
+min_severity_to_report = 40
+# Hard cap on the operator queue. 0 = no cap.
+max_incidents_reported = 0
+
+
+# ---------------------------------------------------------------------------
+# 1. ROUTING CHANGE — the current routing no longer matches what was booked
+# ---------------------------------------------------------------------------
+[routing_change]
+enabled = true
+# Transshipment hub swapped for another hub in the same equivalence group
+# (see [routing_change.equivalent_hubs]) is normal network management: ignore.
+ignore_equivalent_transshipment = true
+# Ignore rerouting that adds less than this to planned transit.
+min_added_transit_days = 1.0
+# A changed final discharge port is always an exception regardless of transit impact.
+flag_destination_change = true
+# Extra transshipment legs added vs. booking.
+flag_added_transshipment = true
+
+[routing_change.equivalent_hubs]
+# Hubs treated as interchangeable inside the same group.
+sea_asia = ["SGSIN", "MYPKG", "MYTPP"]
+north_europe = ["NLRTM", "BEANR", "DEHAM"]
+med = ["ESALG", "MAPTM", "ESVLC"]
+carib = ["PACTB", "JMKIN", "DOCAU"]
+
+
+# ---------------------------------------------------------------------------
+# 2. VESSEL SWAP — the container is not on the vessel/voyage it was booked on
+# ---------------------------------------------------------------------------
+[vessel_swap]
+enabled = true
+# Same vessel, new voyage number = schedule renumbering, not a swap.
+ignore_voyage_only_change = true
+# A swap that moves the ETA by less than this is a paper change: ignore.
+min_eta_impact_hours = 12
+# A change of service loop is structural — flag it even at low ETA impact.
+flag_service_loop_change = true
+
+
+# ---------------------------------------------------------------------------
+# 3. DWELL — the box has stopped moving somewhere it should not have
+# ---------------------------------------------------------------------------
+[dwell]
+enabled = true
+# Hours since the last discharge with no onward load event.
+transshipment_max_hours = 120
+destination_max_hours = 72
+origin_max_hours = 96
+# Applied on top of the limits above before anything is flagged.
+grace_hours = 12
+# Weekend/holiday allowance at the port of dwell.
+non_working_day_allowance_hours = 24
+
+
+# ---------------------------------------------------------------------------
+# 4. ETA DRIFT — the arrival date is moving
+# ---------------------------------------------------------------------------
+[eta_drift]
+enabled = true
+# vs. the ETA quoted at booking.
+min_drift_hours = 24
+# vs. yesterday's snapshot — catches fast-moving drift the baseline hides.
+min_daily_drift_hours = 12
+# "later" = only delays, "both" = also flag early arrivals (they break delivery
+# appointments and free-time calculations just as often).
+direction = "both"
+critical_drift_hours = 96
+
+
+# ---------------------------------------------------------------------------
+# 5. TRANSIT TIME — projected transit vs. the routing-guide benchmark
+# ---------------------------------------------------------------------------
+[transit_time]
+enabled = true
+# Days beyond (routing-guide benchmark + lane tolerance) before flagging.
+tolerance_days = 3.0
+critical_excess_days = 7.0
+# Also flag lanes running far FASTER than the guide — usually a data problem in
+# the routing guide, which is worth knowing before it prices the next contract.
+flag_faster_than_guide = true
+faster_than_guide_days = 4.0
+
+
+# ---------------------------------------------------------------------------
+# SEVERITY — 0-100 composite score used to rank the operator queue
+# ---------------------------------------------------------------------------
+[severity]
+# Base score per exception family. Calibrated so that a single mid-magnitude
+# signal on a standard account lands in the 40s (worth reading, not worth
+# interrupting anyone for) and only a genuine pile-up reaches the 80s.
+routing_change = 42
+vessel_swap = 38
+dwell = 46
+eta_drift = 33
+transit_time = 35
+# Each additional correlated signal on the same container adds this.
+correlated_signal_bonus = 5
+# Maximum points added for how far past the threshold the primary signal sits.
+magnitude_bonus_max = 20
+
+[severity.account_tier_bonus]
+strategic = 12
+key = 6
+standard = 0
+
+[severity.multipliers]
+# Arriving within `urgent_days_to_arrival` days — no time left to recover.
+days_to_arrival_urgent = 1.15
+urgent_days_to_arrival = 5
+# Projected arrival is past the last free day at destination — demurrage risk.
+last_free_day_risk = 1.15
+# Declared cargo value above `high_value_threshold_usd`.
+high_value_cargo = 1.05
+high_value_threshold_usd = 250000
+
+
+# ---------------------------------------------------------------------------
+# GROUPING — one container, one incident
+# ---------------------------------------------------------------------------
+[grouping]
+# A vessel swap that causes ETA drift that breaks the transit benchmark is ONE
+# operational event, not three alerts. The first family in `primary_order` that
+# fires becomes the incident; the rest are attached as contributing signals with
+# their own evidence.
+enabled = true
+primary_order = ["routing_change", "vessel_swap", "dwell", "eta_drift", "transit_time"]

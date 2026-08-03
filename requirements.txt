@@ -1,0 +1,11 @@
+# Core detection engine, CLI, report and demo builder: ZERO third-party dependencies.
+# Python 3.11+ standard library only (tomllib, dataclasses, argparse, csv, json).
+#
+# The two optional layers below are only needed if you want the LLM triage layer
+# or the MCP server. Everything else runs without them (see `--no-llm`).
+
+# Optional: agentic loop over the Claude API (`middlewatch run` without --no-llm)
+anthropic>=0.39.0
+
+# Optional: stdio MCP server (`python -m middlewatch.mcp_server`)
+mcp>=1.2.0

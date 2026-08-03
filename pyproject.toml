@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "middle-watch-agent"
+version = "1.0.0"
+description = "On-water exception monitoring agent for ocean freight operations"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Anthony Denis" }]
+keywords = ["logistics", "ocean-freight", "agent", "claude", "mcp", "exception-monitoring"]
+classifiers = [
+  "Programming Language :: Python :: 3.11",
+  "License :: OSI Approved :: MIT License",
+  "Intended Audience :: Manufacturing",
+  "Topic :: Office/Business",
+]
+dependencies = []
+
+[project.optional-dependencies]
+agent = ["anthropic>=0.39.0"]
+mcp = ["mcp>=1.2.0"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+middlewatch = "middlewatch.cli:main"
+
+[tool.setuptools]
+packages = ["middlewatch", "middlewatch.detectors"]
+
+[tool.setuptools.package-data]
+middlewatch = ["demo_template.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
