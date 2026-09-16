@@ -51,7 +51,7 @@ def create_app(settings: Settings | None = None):
     app.state.sessions = sessions
     app.state.provider = SimulatedProvider()
     app.state.limiter = RunLimiter(settings.runs_per_hour)
-    app.add_middleware(RequestGuard, limiter=app.state.limiter)
+    app.add_middleware(RequestGuard, limiter=app.state.limiter, render_proxy=settings.render_proxy)
     app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins,
         allow_origin_regex=settings.preview_origin_regex, allow_credentials=False,
         allow_methods=['GET', 'POST'], allow_headers=['Content-Type'], expose_headers=['Retry-After'])

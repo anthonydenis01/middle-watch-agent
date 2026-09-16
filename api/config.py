@@ -28,6 +28,7 @@ class Settings:
     ])
     runs_per_hour: int = 20
     cleanup_interval: float = 300
+    render_proxy: bool = field(default_factory=lambda: os.getenv('RENDER') == 'true')
     netlify_site_name: str = field(default_factory=lambda: os.getenv('NETLIFY_SITE_NAME', '').strip())
     anthropic_api_key: str = field(default_factory=lambda: os.getenv('ANTHROPIC_API_KEY', ''), repr=False)
     anthropic_model: str = field(default_factory=lambda: os.getenv('ANTHROPIC_MODEL', ''))

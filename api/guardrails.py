@@ -1,6 +1,7 @@
 """Bound requests before parsing; rate-limit one worker without retaining raw IPs."""
 from collections import deque
 import hashlib
+from ipaddress import ip_address, ip_network
 import math
 from threading import Lock
 import time
@@ -41,9 +42,24 @@ class RunLimiter:
             return 0
 
 
+def client_address(scope, render_proxy=False):
+    peer = (scope.get('client') or ('unknown', 0))[0]
+    if render_proxy:
+        try:
+            address = ip_address(peer)
+            # Only trust Render's edge-injected single-IP header via its private proxy.
+            networks = ('127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '::1/128', 'fc00::/7')
+            headers = [value for key, value in scope['headers'] if key.lower() == b'true-client-ip']
+            if any(address in ip_network(network) for network in networks) and len(headers) == 1:
+                return str(ip_address(headers[0].decode('ascii')))
+        except (ValueError, UnicodeError):
+            pass
+    return peer
+
+
 class RequestGuard:
-    def __init__(self, app, limiter):
-        self.app, self.limiter = app, limiter
+    def __init__(self, app, limiter, render_proxy=False):
+        self.app, self.limiter, self.render_proxy = app, limiter, render_proxy
 
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http':
@@ -51,8 +67,7 @@ class RequestGuard:
         path, method = scope['path'], scope['method']
         if method == 'POST' and (path.rstrip('/') in (
                 '/api/watchlists', '/api/watchlists/csv', '/api/watchlists/sample', '/api/benchmark')):
-            peer = scope.get('client') or ('unknown', 0)
-            retry = self.limiter.allow(peer[0])
+            retry = self.limiter.allow(client_address(scope, self.render_proxy))
             if retry:
                 return await error_response(429, 'rate_limited', 'Run limit reached. Please try again later.',
                     headers={'Retry-After': str(retry)})(scope, receive, send)
