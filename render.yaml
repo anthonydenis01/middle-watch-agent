@@ -3,6 +3,7 @@ services:
     name: middle-watch-api
     runtime: python
     plan: free
+    region: ohio
     branch: app
     buildCommand: pip install -r api/requirements.txt
     startCommand: python -m api.deploy
