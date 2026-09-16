@@ -29,6 +29,11 @@ class Settings:
     runs_per_hour: int = 20
     cleanup_interval: float = 300
     netlify_site_name: str = field(default_factory=lambda: os.getenv('NETLIFY_SITE_NAME', '').strip())
+    anthropic_api_key: str = field(default_factory=lambda: os.getenv('ANTHROPIC_API_KEY', ''), repr=False)
+    anthropic_model: str = field(default_factory=lambda: os.getenv('ANTHROPIC_MODEL', ''))
+    resend_api_key: str = field(default_factory=lambda: os.getenv('RESEND_API_KEY', ''), repr=False)
+    alert_from: str = field(default_factory=lambda: os.getenv('ALERT_FROM', ''), repr=False)
+    alert_to: str = field(default_factory=lambda: os.getenv('ALERT_TO', ''), repr=False)
 
     @property
     def preview_origin_regex(self):

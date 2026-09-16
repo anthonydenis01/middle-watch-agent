@@ -15,6 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
 from api.guardrails import RequestGuard, RunLimiter, error_response
 from api.services.retention import scheduled_cleanup
+from api.explain import explain
 from api.config import FEED_NOTICE, ROOT, Settings, VERSION
 from api.db import connect
 from api.db.models import Container, Watchlist, now
@@ -141,7 +142,15 @@ def create_app(settings: Settings | None = None):
             if container is None:
                 raise HTTPException(404, 'Container not found or expired.')
             active_watchlist(session, container.watchlist_id)
-            return container_payload(container, detail=True)
+            payload = container_payload(container, detail=True)
+            if container.exceptions and not container.journey.get('explanation_attempted'):
+                template = container.journey['explanation']
+                enriched = explain(template, payload['exceptions'], settings)
+                if settings.anthropic_api_key and settings.anthropic_model:
+                    container.journey = {**container.journey, 'explanation': enriched, 'explanation_attempted': True}
+                    session.commit()
+                payload['explanation'] = enriched
+            return payload
 
     @app.get('/api/meta/eval')
     def metrics():
