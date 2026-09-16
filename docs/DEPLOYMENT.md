@@ -90,7 +90,7 @@ creating `v2.0.0`, verify:
    for the controlled synthetic benchmark. Never point this script at another API.
 6. CI is green for the release commit. Merge `app` into `main` without rewriting
    history, create the `v2.0.0` tag and release notes, and switch hosting branches to
-   `main` only after release approval/checks. Until then `main` remains unchanged.
+   `main` only after release checks. Until then `main` remains unchanged.
 
 If an account operation, credential or payment is required, the owner performs it.
 Optional explanation/email services can remain disabled indefinitely. Enabling them
