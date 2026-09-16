@@ -2,7 +2,7 @@
 
 **Reads a daily container-status file, finds the five things that go wrong on the water, and hands an operator a ranked queue with the evidence attached.**
 
-40,000 containers scanned in **2.3 seconds**. 100 % of injected exceptions caught, 0 % false positives on the synthetic benchmark. Every finding cites the exact fields that triggered it.
+40,000 containers scanned in **2.3 seconds**. 100 % of injected exceptions caught, 0 % false positives on the controlled synthetic benchmark. Every finding cites the exact fields that triggered it.
 
 **[▶ Live demo dashboard](https://anthonydenis01.github.io/middle-watch-agent/demo.html)** · designed for ocean freight operations · Python 3.11+ · MIT
 
@@ -127,6 +127,8 @@ Every line under `evidence:` is a field path, the observed value, what it was co
 ## Detection quality
 
 Measured on every run by `scripts/evaluate.py` against the generator's ground truth, which the detection path never sees:
+
+controlled synthetic benchmark
 
 | Metric | Result (40,000 rows, seed 7) |
 |---|---|
