@@ -18,7 +18,7 @@ Only `SimulatedProvider` supplies journeys. No real shipment or customer data is
 [Planned v2 demo](https://themiddlewatch.com) ·
 [Existing static demonstration](https://anthonydenis01.github.io/middle-watch-agent/demo.html) ·
 [Source](https://github.com/anthonydenis01/middle-watch-agent/tree/app) ·
-[10-minute walkthrough](docs/DEMO_SCRIPT.md)
+[10-minute walkthrough](docs/DEMO_SCRIPT.md) · [Hosting setup](docs/DEPLOYMENT.md)
 
 The v2 host is not yet release-verified. Hosting setup and public checks precede the
 `v2.0.0` tag. Python 3.11+ and Node 22.12+ are required for local development.
@@ -97,8 +97,10 @@ provider. The 100-input cap is applied before deduplication.
 - Runs and benchmark requests share a 20-per-IP sliding-hour allowance. Rejected
   attempts count; `429` includes `Retry-After`. Reads and validation remain available.
   The bounded limiter is process-local and resets on restart: deploy one worker and
-  one instance. A shared limiter is required before scaling out. The app ignores raw
-  forwarded headers; only trusted reverse-proxy configuration may set the client IP.
+  one instance. A shared limiter is required before scaling out. Generic forwarded
+  headers are ignored. On Render only, a private proxy peer may supply one valid
+  `True-Client-IP`; otherwise limits use the peer address. Live release checks must
+  confirm header spoof resistance and isolation between independent client IPs.
 - Raw bodies are bounded before parsing: 16,000 bytes normally, 210,000 bytes for the
   CSV multipart envelope, with a separate 200,000-byte file cap. Errors have a stable
   `error.code`, a safe message and the simulation notice; submitted values are omitted.
