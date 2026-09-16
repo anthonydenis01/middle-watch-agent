@@ -1,4 +1,5 @@
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from dotenv import load_dotenv
@@ -26,3 +27,14 @@ class Settings:
         *filter(None, os.getenv('CORS_ORIGINS', '').split(',')),
     ])
     runs_per_hour: int = 20
+    cleanup_interval: float = 300
+    netlify_site_name: str = field(default_factory=lambda: os.getenv('NETLIFY_SITE_NAME', '').strip())
+
+    @property
+    def preview_origin_regex(self):
+        if not self.netlify_site_name:
+            return None
+        if not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]*[a-z0-9])?', self.netlify_site_name):
+            raise ValueError('NETLIFY_SITE_NAME must be a site slug.')
+        site = re.escape(self.netlify_site_name)
+        return rf'https://(?:deploy-preview-\d+--|[a-z0-9-]+--)?{site}\.netlify\.app'

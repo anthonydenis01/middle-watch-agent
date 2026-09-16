@@ -11,7 +11,7 @@ NEXT = {'AT_ORIGIN_TERMINAL': 'Vessel departure', 'ON_WATER': 'Next port arrival
 def create_watchlist(session, provider, numbers, source):
     watchlist = Watchlist(expires_at=now() + timedelta(hours=24), source=source)
     session.add(watchlist)
-    for value in dict.fromkeys(numbers):
+    for value in dict.fromkeys(n.strip().upper() for n in numbers):
         validation = validate_number(value)
         container = Container(number=validation['number'], valid=validation['valid'], invalid_reason=validation['reason'])
         watchlist.containers.append(container)

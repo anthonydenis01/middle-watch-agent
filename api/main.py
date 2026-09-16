@@ -1,4 +1,5 @@
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
+import asyncio
 from typing import Annotated
 from fastapi import FastAPI, File, HTTPException, UploadFile
 import csv
@@ -9,6 +10,11 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.cors import CORSMiddleware
+from api.guardrails import RequestGuard, RunLimiter, error_response
+from api.services.retention import scheduled_cleanup
 from api.config import FEED_NOTICE, ROOT, Settings, VERSION
 from api.db import connect
 from api.db.models import Container, Watchlist, now
@@ -29,14 +35,42 @@ def create_app(settings: Settings | None = None):
 
     @asynccontextmanager
     async def lifespan(app):
-        yield
-        engine.dispose()
+        task = asyncio.create_task(scheduled_cleanup(sessions, settings.cleanup_interval))
+        try:
+            yield
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+            engine.dispose()
 
     app = FastAPI(title='Middle Watch API', version=VERSION, description=FEED_NOTICE, lifespan=lifespan)
     app.state.settings = settings
     app.state.engine = engine
     app.state.sessions = sessions
     app.state.provider = SimulatedProvider()
+    app.state.limiter = RunLimiter(settings.runs_per_hour)
+    app.add_middleware(RequestGuard, limiter=app.state.limiter)
+    app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins,
+        allow_origin_regex=settings.preview_origin_regex, allow_credentials=False,
+        allow_methods=['GET', 'POST'], allow_headers=['Content-Type'], expose_headers=['Retry-After'])
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error(request, exc):
+        return error_response(exc.status_code, f'http_{exc.status_code}', str(exc.detail), headers=exc.headers)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request, exc):
+        issues = [{'location': list(e['loc']), 'type': e['type']} for e in exc.errors()]
+        return error_response(422, 'invalid_request', 'Check the request format and input limits.', issues=issues)
+
+    @app.exception_handler(SQLAlchemyError)
+    async def database_error(request, exc):
+        return error_response(503, 'database_unavailable', 'The database is temporarily unavailable. Try again shortly.')
+
+    @app.exception_handler(Exception)
+    async def unexpected_error(request, exc):
+        return error_response(500, 'internal_error', 'The request could not be completed. Try again shortly.')
 
     @app.get('/health')
     def health():
