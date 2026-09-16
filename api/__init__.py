@@ -1,0 +1,1 @@
+"""Middle Watch HTTP application."""
