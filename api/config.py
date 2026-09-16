@@ -20,7 +20,7 @@ def database_url():
 
 @dataclass
 class Settings:
-    database_url: str = field(default_factory=database_url)
+    database_url: str = field(default_factory=database_url, repr=False)
     cors_origins: list[str] = field(default_factory=lambda: [
         'https://themiddlewatch.com', 'https://www.themiddlewatch.com',
         'http://localhost:5173', 'http://127.0.0.1:5173',

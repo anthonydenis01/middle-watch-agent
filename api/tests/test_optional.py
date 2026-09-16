@@ -39,7 +39,8 @@ def test_explanation_falls_back_on_timeout_bad_shape_and_error():
     def timeout(request):
         raise httpx.ReadTimeout('private-provider-detail')
     for handler in (timeout, lambda r: httpx.Response(429), lambda r: httpx.Response(200, json={'content': []}),
-            lambda r: httpx.Response(200, json={'content': [{'type': 'text', 'text': '[]'}]})):
+            lambda r: httpx.Response(200, json={'content': [{'type': 'text', 'text': '[]'}]}),
+            lambda r: httpx.Response(200, json={'content': [None]})):
         assert explain(TEMPLATE, [], configured(), httpx.MockTransport(handler)) == TEMPLATE
 
 

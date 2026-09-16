@@ -1,29 +1,62 @@
-name: tests
-
+﻿name: tests
 on:
   push:
-    branches: [main]
+    branches: [main, app]
   pull_request:
   workflow_dispatch:
-
+permissions:
+  contents: read
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  test:
+  verify:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.12"]
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install
-        run: pip install pytest
-      - name: Unit + pipeline tests
-        run: pytest -q
-      - name: End-to-end run on a generated snapshot
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install API into its isolated environment
         run: |
-          python data/generate.py --rows 5000 --seed 7 --out data/out/ci.jsonl
-          python -m middlewatch run --snapshot data/out/ci.jsonl --no-llm --quiet \
-            --json data/out/ci-report.json
-          python scripts/evaluate.py --snapshot data/out/ci.jsonl
+          python -m venv api/.venv
+          api/.venv/bin/python -m pip install -r api/requirements.txt
+      - name: Existing and API tests
+        run: api/.venv/bin/python -m pytest tests api/tests -q
+      - name: Database migrations and schema drift
+        run: |
+          api/.venv/bin/python -m alembic upgrade head
+          api/.venv/bin/python -m alembic check
+      - name: Frozen benchmark and HTTP equivalence
+        run: |
+          api/.venv/bin/python scripts/verify_baseline.py
+          api/.venv/bin/python scripts/evaluate_http.py
+      - name: Web install, build, lint and unit tests
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+          npm run lint
+          npm test
+      - name: Browser workflow, mobile, keyboard and accessibility
+        working-directory: web
+        run: |
+          npx playwright install --with-deps chromium
+          npm run e2e
+      - name: Source, built output and history checks
+        run: api/.venv/bin/python scripts/check_repository.py
+      - name: Preserve browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failure
+          path: web/test-results
+          retention-days: 7

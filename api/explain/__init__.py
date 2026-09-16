@@ -17,6 +17,8 @@ def explain(template, evidence, settings, transport=None):
                 'messages': [{'role': 'user', 'content': json.dumps({'template': template, 'evidence': evidence})}]})
             response.raise_for_status()
             blocks = response.json()['content']
+            if not isinstance(blocks, list) or any(not isinstance(b, dict) for b in blocks):
+                return dict(template)
             result = json.loads(''.join(b['text'] for b in blocks if b.get('type') == 'text'))
             if not isinstance(result, dict) or any(not isinstance(result.get(k), str) or
                     not result[k].strip() or len(result[k]) > 3000 for k in ('text', 'action', 'draft_message')):
