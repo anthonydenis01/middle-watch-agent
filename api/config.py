@@ -18,14 +18,19 @@ def database_url():
     return value
 
 
+def default_cors_origins():
+    origins = ['https://themiddlewatch.com', 'https://www.themiddlewatch.com']
+    if os.getenv('RENDER') != 'true':
+        # Localhost is a development-only default; the deployed API (RENDER=true) never allows it.
+        origins += ['http://localhost:5173', 'http://127.0.0.1:5173']
+    origins += [origin for origin in os.getenv('CORS_ORIGINS', '').split(',') if origin]
+    return origins
+
+
 @dataclass
 class Settings:
     database_url: str = field(default_factory=database_url, repr=False)
-    cors_origins: list[str] = field(default_factory=lambda: [
-        'https://themiddlewatch.com', 'https://www.themiddlewatch.com',
-        'http://localhost:5173', 'http://127.0.0.1:5173',
-        *filter(None, os.getenv('CORS_ORIGINS', '').split(',')),
-    ])
+    cors_origins: list[str] = field(default_factory=default_cors_origins)
     runs_per_hour: int = 20
     cleanup_interval: float = 300
     render_proxy: bool = field(default_factory=lambda: os.getenv('RENDER') == 'true')

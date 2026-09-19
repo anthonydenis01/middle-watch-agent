@@ -85,6 +85,17 @@ def test_cors_only_configured_site_and_its_previews():
         assert response.headers['access-control-allow-origin'] == 'https://themiddlewatch.com'
 
 
+def test_localhost_cors_is_development_only(monkeypatch):
+    monkeypatch.delenv('CORS_ORIGINS', raising=False)
+    monkeypatch.delenv('RENDER', raising=False)
+    dev = Settings().cors_origins
+    assert 'http://localhost:5173' in dev and 'http://127.0.0.1:5173' in dev
+    monkeypatch.setenv('RENDER', 'true')
+    prod = Settings().cors_origins
+    assert prod == ['https://themiddlewatch.com', 'https://www.themiddlewatch.com']
+    assert not any('localhost' in origin or '127.0.0.1' in origin for origin in prod)
+
+
 def test_normalized_duplicates_are_one_row(client):
     response = client.post('/api/watchlists', json={'numbers': ['CSQU3054383', ' csqu3054383 ', 'CSQU3054383']})
     assert response.status_code == 201

@@ -66,6 +66,11 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           npm run e2e
+      - name: Python dependency audit (report-only)
+        continue-on-error: true
+        run: |
+          api/.venv/bin/python -m pip install pip-audit
+          api/.venv/bin/python -m pip_audit -r api/requirements.txt
       - name: Source, built output and history checks
         run: api/.venv/bin/python scripts/check_repository.py
       - name: Preserve browser failure evidence
