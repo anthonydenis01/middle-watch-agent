@@ -15,13 +15,15 @@ knowing what matters is the hard part.
 **Simulated feed — journeys are generated, no carrier is contacted.**
 Only `SimulatedProvider` supplies journeys. No real shipment or customer data is used.
 
-[Planned v2 demo](https://themiddlewatch.com) ·
+[Live demo](https://themiddlewatch.com) ·
+[API health](https://middle-watch-api.onrender.com/health) ·
 [Existing static demonstration](https://anthonydenis01.github.io/middle-watch-agent/demo.html) ·
 [Source](https://github.com/anthonydenis01/middle-watch-agent/tree/app) ·
 [10-minute walkthrough](docs/DEMO_SCRIPT.md) · [Hosting setup](docs/DEPLOYMENT.md)
 
-The v2 host is not yet release-verified. Hosting setup and public checks precede the
-`v2.0.0` tag. Python 3.11+ and Node 22.12+ are required for local development.
+The v2 live demo has passed public browser and HTTP benchmark checks.
+[Release verification](docs/releases/v2.0.0.md). Python 3.11+ and Node 22.12+ are
+required for local development.
 
 ## Architecture
 

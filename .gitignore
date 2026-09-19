@@ -24,6 +24,7 @@ env/
 *.db-shm
 *.db-wal
 node_modules/
+.netlify/
 playwright-report/
 test-results/
 
