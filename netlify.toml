@@ -1,0 +1,22 @@
+[build]
+base = "web"
+command = "npm run build"
+publish = "dist"
+
+[build.environment]
+NODE_VERSION = "22"
+# Set VITE_API_URL to the public HTTPS API origin in the Netlify dashboard.
+# The build guard requires this on Netlify; never put service keys in VITE_*.
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200
+
+[[headers]]
+for = "/*"
+[headers.values]
+X-Content-Type-Options = "nosniff"
+Referrer-Policy = "strict-origin-when-cross-origin"
+X-Frame-Options = "DENY"
+Permissions-Policy = "camera=(), microphone=(), geolocation=()"

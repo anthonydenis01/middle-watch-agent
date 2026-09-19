@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: middle-watch-api
+    runtime: python
+    plan: free
+    region: ohio
+    branch: app
+    buildCommand: pip install -r api/requirements.txt
+    startCommand: python -m api.deploy
+    healthCheckPath: /health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.12
+      - key: DATABASE_URL
+        sync: false
+      - key: NETLIFY_SITE_NAME
+        sync: false

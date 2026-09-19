@@ -1,0 +1,13 @@
+{
+  "eta_jitter": 37921,
+  "eta_jitter_clean": 37596,
+  "voyage_renumber": 2326,
+  "voyage_renumber_clean": 2219,
+  "dwell_eligible": 12603,
+  "dwell_not_injected": 12460,
+  "dwell_not_injected_clean": 11763,
+  "open_dwell_below_base_limit": 11017,
+  "open_dwell_below_base_limit_clean": 10391,
+  "equivalent_hub": 1261,
+  "equivalent_hub_clean": 1187
+}

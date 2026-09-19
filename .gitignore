@@ -18,7 +18,15 @@ env/
 # Environment / secrets
 .env
 .env.*
+!.env.example
 *.key
+*.db
+*.db-shm
+*.db-wal
+node_modules/
+.netlify/
+playwright-report/
+test-results/
 
 # Generated synthetic data and run artifacts
 data/out/

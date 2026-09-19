@@ -1,304 +1,169 @@
-# Middle Watch — on-water exception monitoring agent
+﻿# Middle Watch
 
-**Reads a daily container-status file, finds the five things that go wrong on the water, and hands an operator a ranked queue with the evidence attached.**
+**Controlled synthetic benchmark: 40,000 rows, 2,393/2,393 injected exceptions caught,
+100% family recall, and 0 false positives among 2,393 reported incidents.** These are
+generated cases, not independent real-world accuracy estimates. The file contains
+39,849 unique identifiers; the unchanged harness counts rows and labelled identifiers
+differently. [Definitions, per-family results and near-misses](docs/benchmark/README.md).
 
-40,000 containers scanned in **2.3 seconds**. 100 % of injected exceptions caught, 0 % false positives on the synthetic benchmark. Every finding cites the exact fields that triggered it.
+Middle Watch is an open-source exception-monitoring demo built by Anthony Denis.
+Paste up to 100 container numbers, upload a one-column CSV, or load the sample list.
+Inspect ranked exceptions, event timelines, and the exact fields and thresholds that
+triggered each finding. Once data is connected, tracking is easy to automate;
+knowing what matters is the hard part.
 
-**[▶ Live demo dashboard](https://anthonydenis01.github.io/middle-watch-agent/demo.html)** · designed for ocean freight operations · Python 3.11+ · MIT
+**Simulated feed — journeys are generated, no carrier is contacted.**
+Only `SimulatedProvider` supplies journeys. No real shipment or customer data is used.
 
----
+[Live demo](https://themiddlewatch.com) ·
+[API health](https://middle-watch-api.onrender.com/health) ·
+[Existing static demonstration](https://anthonydenis01.github.io/middle-watch-agent/demo.html) ·
+[Source](https://github.com/anthonydenis01/middle-watch-agent/tree/app) ·
+[10-minute walkthrough](docs/DEMO_SCRIPT.md) · [Hosting setup](docs/DEPLOYMENT.md)
 
-## Why this exists
+The v2 live demo has passed public browser and HTTP benchmark checks.
+[Release verification](docs/releases/v2.0.0.md). Python 3.11+ and Node 22.12+ are
+required for local development.
 
-On an import desk, exceptions on the water are found by whoever happens to open the booking — which is usually after the customer has already called. The information is all there: the booking says one vessel, the snapshot says another; the routing guide promises 34 days, the lane is running 41. Nobody has time to read 40,000 rows looking for it.
+## Architecture
 
-I built and proved a structured review method for exactly this problem in ocean freight operations at scale — daily exception review across a large on-water portfolio, in minutes instead of never. But a method executed by a human is not software. **This repository is that logic rebuilt from scratch as an agent that actually runs**: clean-room, synthetic data, no employer inputs of any kind.
-
-The design bet is a specific one: **detection must be deterministic and auditable; judgement is where a model earns its place.** Five hand-written detectors decide what counts as an exception and prove it with field-level evidence. Claude orchestrates those detectors as tools, verifies the containers it intends to escalate, and writes the triage an operator reads. Pull the model out and the report still ships — with rule-generated triage, the same evidence, and the same ranking.
-
----
-
-## Quick start
-
-```bash
-git clone https://github.com/anthonydenis01/middle-watch-agent.git
-cd middle-watch-agent
-
-# 1. generate a synthetic daily snapshot (40k containers, exceptions injected)
-python data/generate.py --rows 40000 --seed 7 --out data/out/snapshot.jsonl
-
-# 2. run the morning report — no API key needed
-python -m middlewatch run --snapshot data/out/snapshot.jsonl --no-llm
-
-# 3. measure detection quality against the generator's ground truth
-python scripts/evaluate.py --snapshot data/out/snapshot.jsonl
+```mermaid
+flowchart LR
+    UI[React + TypeScript / Vite] --> API[FastAPI]
+    API --> Validate[ISO 6346 validation]
+    API --> Provider[SimulatedProvider]
+    Provider --> Rules[Existing deterministic detectors]
+    Rules --> DB[(SQLite locally / Postgres hosted)]
+    DB --> Evidence[Timeline + evidence + template explanation]
+    Evidence --> UI
 ```
 
-No dependencies for any of that — the detection engine, the CLI, the report and the dashboard builder are Python 3.11 standard library only.
+Five detector families cover routing changes, vessel swaps, dwell, ETA drift, and
+transit-time discrepancies. They retain the v1 rules, tests and eval harness.
+The HTTP adapter supplies generated journeys and stores field-level evidence;
+model output never controls findings or severity. The original agentic CLI remains
+available with `python -m middlewatch --help`.
 
-To run the **agentic loop** (Claude orchestrating the detectors as tools):
+## Run locally without keys
 
-```bash
-pip install anthropic
-export ANTHROPIC_API_KEY=sk-ant-...
-python -m middlewatch run --snapshot data/out/snapshot.jsonl --verbose
+From the repository root, in PowerShell:
+
+```powershell
+git switch app
+python -m venv api/.venv
+.\api\.venv\Scripts\python.exe -m pip install -r api/requirements.txt
+.\api\.venv\Scripts\python.exe scripts/serve_local.py
 ```
 
-Without a key, `--no-llm` is used automatically and the run still completes.
+In a second terminal:
 
-Rebuild the dashboard:
-
-```bash
-python scripts/evaluate.py --snapshot data/out/snapshot.jsonl --json data/out/eval.json
-python -m middlewatch run --snapshot data/out/snapshot.jsonl --no-llm --quiet \
-    --json data/out/report.json --demo demo.html --eval-metrics data/out/eval.json
+```powershell
+cd web
+npm ci
+npm run dev
 ```
 
----
+Open http://localhost:5173. API health is http://127.0.0.1:8000/health and the
+interactive API reference is http://127.0.0.1:8000/docs. The launcher applies Alembic
+migrations before starting. SQLite is stored in ignored `api/middlewatch.db`.
+On macOS/Linux use `api/.venv/bin/python` in place of the Windows executable.
+No `.env` is required. To customize, copy `.env.example` to the ignored root `.env`;
+never commit populated values. Browser builds may receive only the public API origin
+in `VITE_API_URL`; no service keys belong in the web environment.
 
-## What it does
+CSV format (UTF-8, exactly one column, up to 100 rows and 200,000 bytes):
 
-```
-daily snapshot (JSONL/CSV)
-        │
-        ├─ 5 detectors ─────────► findings + field-level evidence
-        │                          (deterministic, config-driven, no model)
-        ├─ grouping ────────────► one container = one incident
-        ├─ severity scoring ────► ranked queue, noise floor applied
-        │
-        └─ agentic loop ────────► Claude drives the detectors as tools,
-                                  verifies what it escalates, writes the triage
-                                  │
-                                  └─► console · JSON · Markdown · demo.html
+```csv
+container_number
+CSQU3054383
 ```
 
-1. **Detect** the five exception families across every container.
-2. **Score and filter** — severity 0-100, with a configurable noise floor. False-positive control is a feature: every threshold lives in `config/thresholds.toml`, nothing is hardcoded.
-3. **Rank** — one line per exception: container, account, what changed, why it matters, what to do.
-4. **Cite** — every flagged exception references the exact fields that triggered it.
-5. **Run on command** — CLI, one process, well under the ten-minute budget for a full 40k file.
+Lowercase and surrounding whitespace are normalized; repeated normalized numbers
+produce one row. Invalid numbers remain visible with a reason and never reach the
+provider. The 100-input cap is applied before deduplication.
 
----
+## API and safeguards
 
-## The 5 exception families
-
-| Family | Fires when | Deliberately stays quiet when |
-|---|---|---|
-| **Routing change** | Discharge port changed, a transshipment leg added or removed, or the hub moved to a non-equivalent port | The hub was swapped for another hub in the same equivalence group at no transit cost — network management, not an exception |
-| **Vessel swap** | The container is on a different hull and the swap moves the ETA past the threshold, or the service loop changed | Same vessel with a renumbered voyage; a paper swap that leaves the schedule untouched |
-| **Dwell** | An open `DISCHARGED`/`GATE_IN` with no onward `LOADED`/`GATE_OUT`, past the limit for that location | Inside the limit plus grace, or inside the weekend allowance — the biggest source of Monday-morning false alarms |
-| **ETA drift** | The ETA moved past the threshold against booking, **or** moved sharply since yesterday's snapshot | Sub-threshold jitter on either clock |
-| **Transit time** | Projected transit exceeds routing-guide benchmark + lane tolerance + configured tolerance. Also flags lanes far *faster* than the guide — a stale benchmark prices the next contract wrong | Inside the lane's own tolerance |
-
-**One container, one incident.** A vessel swap that pushes the ETA that breaks the transit benchmark is one operational event, not three alerts. The detectors all still run and all still attach their evidence; grouping picks the root cause (`grouping.primary_order`) and files the rest as contributing signals.
-
----
-
-## Output
-
-Console (default), plus `--json`, `--md`, and `--demo` for the dashboard.
-
-```
-!!  1. [100] MWGU4863925  Granite Peak Electronics (key)  VNSGN-BEANR  AT_DESTINATION_TERMINAL
-      signals : ETA drift, Routing change, Transit-time discrepancy   (root: Routing change)
-      changed : ETA moved 138h later vs. booking
-      changed : Transshipment moved SGSIN → DEHAM (+5.8d transit)
-      changed : Lane VNSGN-BEANR running +6.5d vs benchmark (38.5d actual vs 32.0d guide)
-      why     : The cargo is no longer following the booked routing and the change adds +5.8
-                days of transit, and it arrives in 3.8 days, so there is almost no room left
-                to recover, with the projected arrival already past the last free day, on a
-                key account — ETA drift and Transit-time discrepancy also fired on this
-                container, which is consistent with one root cause rather than 3 separate
-                problems.
-      action  : Check the onward connection at the new hub and tell the account before they
-                see it on their own tracking.
-      eta     : booked 2026-08-01T06:19:10Z  ->  now 2026-08-07T00:37:10Z  (3.8d out)
-      evidence:
-                - booked.routing[].port_sequence='VNSGN > SGSIN > BEANR' — routing as booked
-                - current.routing[].port_sequence='VNSGN > DEHAM > BEANR'  booked/expected=…
-                - current.eta - current.etd='38.5 d'  booked/expected='32.7 d'  threshold='+1.0 d'
-                - computed.projected_transit_days='38.5 d'  expected='32.0 d'  threshold='37.5 d'
-```
-
-Every line under `evidence:` is a field path, the observed value, what it was compared to and the threshold that was crossed. If a finding cannot produce that, it does not ship.
-
----
-
-## Detection quality
-
-Measured on every run by `scripts/evaluate.py` against the generator's ground truth, which the detection path never sees:
-
-| Metric | Result (40,000 rows, seed 7) |
+| Route | Purpose |
 |---|---|
-| Detection recall | **100 %** — 2,393 / 2,393 labelled containers |
-| Family recall (caught for the *right reason*) | **100 %** |
-| False-positive rate | **0 %** — 0 of 2,393 reported incidents on clean containers |
-| Runtime | **2.3 s** end to end |
+| `GET /health` | Version and database reachability |
+| `POST /api/validate` | Validate `{ "numbers": [...] }` |
+| `POST /api/watchlists` | Create from numbers |
+| `POST /api/watchlists/csv` | Create from multipart `file` |
+| `POST /api/watchlists/sample` | Fixed 25-number sample |
+| `GET /api/watchlists/{id}` | Ranked rows and summary |
+| `GET /api/containers/{id}` | Timeline, evidence and explanation |
+| `GET /api/meta/eval` | Committed controlled synthetic benchmark results |
+| `POST /api/benchmark` | Fixed generated benchmark used by HTTP verification |
 
-Definitions, because a recall number without them is marketing:
+- Runs and benchmark requests share a 20-per-IP sliding-hour allowance. Rejected
+  attempts count; `429` includes `Retry-After`. Reads and validation remain available.
+  The bounded limiter is process-local and resets on restart: deploy one worker and
+  one instance. A shared limiter is required before scaling out. Generic forwarded
+  headers are ignored. On Render only, a private proxy peer may supply one valid
+  `True-Client-IP`; otherwise limits use the peer address. Live release checks must
+  confirm header spoof resistance and isolation between independent client IPs.
+- Raw bodies are bounded before parsing: 16,000 bytes normally, 210,000 bytes for the
+  CSV multipart envelope, with a separate 200,000-byte file cap. Errors have a stable
+  `error.code`, a safe message and the simulation notice; submitted values are omitted.
+- Watchlists expire after 24 hours. Reads delete expired records and cascading child
+  rows. A background cleanup runs at startup and every five minutes while the process
+  is awake. A suspended host deletes on wake; physical deletion may therefore lag
+  expiration. Run `python -m api.services.retention` for an explicit cleanup.
+- CORS allows the two project domains and localhost. Set `NETLIFY_SITE_NAME` to the
+  exact owned site slug to allow that site's preview origins. `CORS_ORIGINS` accepts
+  extra explicit origins separated by commas; never use a wildcard.
+- No sign-in, visitor email collection or application cookies. UUID links grant
+  access to generated watchlists until expiry; this is a synthetic-data demo.
 
-- A container is **dirty** if the generator injected at least one exception, **clean** otherwise.
-- **False positive** = a reported incident on a *clean* container. Extra families firing on a *dirty* container are not counted: a reroute that adds six days genuinely does move the ETA, and reporting that is correct.
-- The file is deliberately full of **benign near-misses** kept just under the thresholds — ETA jitter, voyage renumbering, equivalent-hub swaps, long-but-legal dwell. They are all clean containers, so anything raised on them lands in the false-positive count. Without them a detector could flag every row and score 100 % recall.
+## Optional services
 
-Re-measure at any time, or tighten a threshold and watch what happens:
+Both services are off with empty environment values and are unnecessary for the demo.
+The generated journeys always come from `SimulatedProvider`.
 
-```bash
-python scripts/evaluate.py --snapshot data/out/snapshot.jsonl
-python -m middlewatch run --snapshot data/out/snapshot.jsonl --no-llm --quiet --json out.json
+`ANTHROPIC_API_KEY` plus `ANTHROPIC_MODEL` enables a bounded explanation request when
+a flagged container is first inspected. One attempt is cached per container under
+normal sequential use, including failures. Timeouts, malformed responses and service
+errors preserve the deterministic template. The screen labels model drafts for human
+review. Evidence and severity remain unchanged. Concurrent first inspections can
+produce more than one request; leave this option off for a cost-free public demo.
+
+`RESEND_API_KEY`, `ALERT_FROM`, and `ALERT_TO` enable an explicit operator command:
+`python -m api.notify WATCHLIST_UUID`. It sends only a simulated summary to the fixed
+configured recipient, using the watchlist ID as an idempotency key. Visitors cannot
+trigger email. Missing configuration returns a disabled result; failures leave the
+watchlist intact. Do not enable services until their account access and spending
+controls have been reviewed by the owner.
+
+Protocol references: [Claude API](https://platform.claude.com/docs/en/api/overview)
+and [Resend send endpoint](https://resend.com/docs/api-reference/emails/send-email).
+
+## Verify
+
+Run from the root with the API virtual environment's Python:
+
+```powershell
+.\api\.venv\Scripts\python.exe -m pytest tests api/tests -q
+.\api\.venv\Scripts\python.exe -m alembic upgrade head
+.\api\.venv\Scripts\python.exe -m alembic check
+.\api\.venv\Scripts\python.exe scripts/verify_baseline.py
+.\api\.venv\Scripts\python.exe scripts/evaluate_http.py
+.\api\.venv\Scripts\python.exe scripts/check_repository.py
+cd web
+npm run build
+npm run lint
+npm test
+npx playwright install chromium
+npm run e2e
 ```
 
----
-
-## The agentic loop
-
-`middlewatch/agent.py` is a real Claude tool-calling loop, not one large prompt. The model is never handed 40,000 rows. It gets nine tools:
-
-| Tool | What the model uses it for |
-|---|---|
-| `describe_snapshot` | Shape of the file, findings per family, thresholds in effect |
-| `list_detectors` | What each detector flags and what it suppresses |
-| `run_detector` | Run one detector across the file; counts, magnitudes, sampled evidence |
-| `rank_incidents` | The grouped, severity-ranked queue |
-| `get_container` | Everything on one container — verify before escalating |
-| `account_rollup` | Is this one systemic account problem or several unrelated boxes? |
-| `detector_performance` | Which detector is carrying the queue, and which is producing noise |
-| `simulate_threshold` | "What would the queue look like at 36 hours instead of 24?" — simulation only, config on disk is never touched |
-| `emit_report` | Deliver the executive summary and the triage for escalated containers |
-
-The model decides what to investigate, verifies its escalations against the raw container record, and writes the operator-facing wording. It cannot invent a finding: the evidence comes from the detectors either way. Containers it does not escalate still ship with rule-generated triage.
-
-`--verbose` prints every tool call as it happens.
-
-## MCP server
-
-The same tools, over the Model Context Protocol, for any MCP client:
-
-```bash
-pip install mcp
-MIDDLEWATCH_SNAPSHOT=data/out/snapshot.jsonl python -m middlewatch.mcp_server
-```
-
-Claude Desktop (`claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "middle-watch": {
-      "command": "python",
-      "args": ["-m", "middlewatch.mcp_server"],
-      "cwd": "/absolute/path/to/middle-watch-agent",
-      "env": {
-        "MIDDLEWATCH_SNAPSHOT": "data/out/snapshot.jsonl",
-        "MIDDLEWATCH_CONFIG": "config/thresholds.toml"
-      }
-    }
-  }
-}
-```
-
-One tool definition (`middlewatch/tools.py`), three consumers: the Claude API loop, the MCP server, and the CLI.
-
----
-
-## Tuning
-
-Everything that decides "exception or noise" is in [`config/thresholds.toml`](config/thresholds.toml). Nothing is hardcoded in the detectors.
-
-```toml
-[eta_drift]
-min_drift_hours = 24         # vs. the ETA quoted at booking
-min_daily_drift_hours = 12   # vs. yesterday's snapshot
-
-[dwell]
-transshipment_max_hours = 120
-grace_hours = 12
-non_working_day_allowance_hours = 24   # kills the Monday-morning false alarms
-
-[general]
-min_severity_to_report = 40  # below this: counted, kept in the JSON, out of the queue
-```
-
-Ask what a change would do before you make it:
-
-```bash
-python -m middlewatch run --snapshot data/out/snapshot.jsonl --no-llm --quiet
-# or let the agent test it: it has simulate_threshold and is told to use it
-```
-
----
-
-## Tech
-
-| | |
-|---|---|
-| Core engine, CLI, report, dashboard | Python 3.11+, **standard library only** (`tomllib`, `dataclasses`, `csv`, `json`) |
-| Agentic loop | `anthropic` — real tool-calling, 9 tools, `--no-llm` fallback |
-| MCP server | `mcp` — stdio, same tool definitions |
-| Dashboard | One self-contained HTML file. No build step, no CDN, no network at runtime |
-| Tests | `pytest` — 32 tests, including recall/false-positive regression on a regenerated file and the full agentic loop against a stub client |
-
-```
-middle-watch-agent/
-├── config/thresholds.toml       every threshold, one file
-├── data/generate.py             synthetic generator (seedable, injection flags)
-├── data/SCHEMA.md               documented schema + ground-truth definitions
-├── middlewatch/
-│   ├── detectors/               the five detectors, one file each, pure functions
-│   ├── engine.py                snapshot in, ranked incidents out
-│   ├── severity.py              scoring + grouping
-│   ├── triage.py                deterministic narrative (the --no-llm path)
-│   ├── tools.py                 tool layer: agent + MCP + CLI
-│   ├── agent.py                 the Claude tool-calling loop
-│   ├── mcp_server.py            stdio MCP server
-│   ├── report.py                console / JSON / Markdown
-│   └── demo.py + demo_template.html
-├── scripts/evaluate.py          recall / false-positive measurement
-├── tests/                       32 tests
-└── demo.html                    the built dashboard (GitHub Pages)
-```
-
-```bash
-pip install -e ".[dev]" && pytest -q
-```
-
----
-
-## Data schema
-
-Full documentation in [`data/SCHEMA.md`](data/SCHEMA.md). One record per container per day:
-
-```json
-{
-  "snapshot_time": "2026-08-03T06:00:00Z",
-  "container_id": "MWSU1234565",
-  "account_id": "ACC-0001", "account_name": "…", "account_tier": "strategic",
-  "status": "AT_TRANSSHIPMENT",
-  "booked":  { "destination_port": "USMIA", "vessel_name": "…", "voyage": "018E",
-               "etd": "…", "eta": "…", "transit_days": 34.0, "routing": [ … ] },
-  "current": { "destination_port": "USMIA", "vessel_name": "…", "voyage": "018E",
-               "etd": "…", "eta": "…", "routing": [ … ] },
-  "previous_snapshot_eta": "…",
-  "eta_history": [ { "as_of": "…", "eta": "…" } ],
-  "port_events": [ { "port": "PACTB", "event": "DISCHARGED", "timestamp": "…" } ],
-  "routing_guide": { "lane": "CNSHA-USMIA", "benchmark_transit_days": 34.0,
-                     "tolerance_days": 2.0, "standard_transshipment": ["PACTB"] },
-  "last_free_day": "…"
-}
-```
-
-The whole detection model is the gap between `booked` and `current`, read against `routing_guide` and `port_events`. CSV input is supported (`--csv` on the generator); nested objects become JSON strings in their columns.
-
-To point this at real operational data, write an adapter that emits this schema. Nothing downstream changes.
-
----
-
-## About the data
-
-Every row in this repository comes from `data/generate.py`. Container numbers, vessel names, voyage numbers, account names, service loops and transit benchmarks are generated from word lists in that script; port codes are public UN/LOCODEs. **No carrier, customer or operational data of any kind is used, referenced or reproduced anywhere in this repository.** The business logic — "check whether the vessel changed since booking" — belongs to no one; the implementation here is written from scratch.
-
----
+The controlled synthetic benchmark fixes seed 7 and snapshot date 2026-08-03.
+Both comparisons must equal every P0 accuracy field; runtime varies by machine.
+Browser checks exercise the built web app against the real local API, including
+375-pixel layouts, keyboard access and automated accessibility checks. GitHub Actions
+runs these checks on `app`, `main`, and pull requests. Hosting verification later uses
+`scripts/evaluate_http.py --url YOUR_API_ORIGIN` against only this project's API.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+[MIT](LICENSE).

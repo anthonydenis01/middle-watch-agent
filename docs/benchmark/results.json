@@ -1,0 +1,56 @@
+{
+  "snapshot": "data/out/snapshot.jsonl",
+  "rows": 40000,
+  "runtime_seconds": 1.69,
+  "dirty_containers": 2393,
+  "clean_containers": 37607,
+  "reported": 2393,
+  "suppressed_below_severity_floor": 0,
+  "caught": 2393,
+  "missed": 0,
+  "recall_pct": 100.0,
+  "family_recall_pct": 100.0,
+  "false_positives": 0,
+  "false_positive_pct": 0.0,
+  "injected": 2393,
+  "per_family": [
+    {
+      "family": "routing_change",
+      "injected": 489,
+      "caught": 489,
+      "recall_pct": 100.0,
+      "reported_findings_total": 536
+    },
+    {
+      "family": "vessel_swap",
+      "injected": 629,
+      "caught": 629,
+      "recall_pct": 100.0,
+      "reported_findings_total": 629
+    },
+    {
+      "family": "dwell",
+      "injected": 143,
+      "caught": 143,
+      "recall_pct": 100.0,
+      "reported_findings_total": 143
+    },
+    {
+      "family": "eta_drift",
+      "injected": 783,
+      "caught": 783,
+      "recall_pct": 100.0,
+      "reported_findings_total": 2079
+    },
+    {
+      "family": "transit_time",
+      "injected": 405,
+      "caught": 405,
+      "recall_pct": 100.0,
+      "reported_findings_total": 965
+    }
+  ],
+  "missed_container_ids": [],
+  "missed_only_because_suppressed": [],
+  "false_positive_container_ids": []
+}
